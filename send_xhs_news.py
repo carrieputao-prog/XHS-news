@@ -71,7 +71,6 @@ def put_github_file(path: str, content: str, message: str, sha: str | None = Non
 
 
 def generate_daily_hot_trends() -> dict[str, Any]:
-    today = beijing_now().strftime("%Y年%m月%d日")
     window_end = beijing_now()
     window_start = window_end - timedelta(hours=24)
 
@@ -92,7 +91,31 @@ def generate_daily_hot_trends() -> dict[str, Any]:
 - 来源优先小红书、新红、热点雷达，可参考国内媒体，但必须和小红书传播有关。
 - 无法确认发布时间时，热度证据中标注“时间待核验”。
 
-只返回JSON，不要Markdown。"""
+只返回JSON，不要Markdown。JSON结构如下：
+{{
+  "hot_topics": [
+    {{
+      "topic": "话题",
+      "evidence": "热度证据",
+      "representative_note": "代表笔记",
+      "reason": "一句话推荐理由",
+      "source": "来源",
+      "tags": ["标签词"]
+    }}
+  ],
+  "low_follower_hits": [
+    {{
+      "title": "标题",
+      "followers": "粉丝数",
+      "engagement": "赞藏评",
+      "engagement_follower_ratio": "互动粉丝比",
+      "reason": "爆发原因",
+      "source": "来源",
+      "tags": ["标签词"]
+    }}
+  ],
+  "ai_terms": ["AI相关词"]
+}}"""
 
     response = httpx.post(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
@@ -102,12 +125,11 @@ def generate_daily_hot_trends() -> dict[str, Any]:
             "tools": [{"google_search": {}}],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": daily_schema(),
             },
         },
         timeout=120,
     )
-    response.raise_for_status()
+    raise_for_gemini_error(response)
     raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(strip_json_fence(raw))
 
@@ -264,7 +286,7 @@ source统一使用：Agent-小红书热点-{week_start}-{week_end}
         },
         timeout=60,
     )
-    response.raise_for_status()
+    raise_for_gemini_error(response)
     raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     result = json.loads(strip_json_fence(raw))
     return result.get("candidates", [])
@@ -339,6 +361,14 @@ def strip_json_fence(raw: str) -> str:
     if text.endswith("```"):
         text = text[:-3].strip()
     return text
+
+
+def raise_for_gemini_error(response: httpx.Response) -> None:
+    if response.is_success:
+        return
+    print(f"Gemini API error: {response.status_code}")
+    print(response.text)
+    response.raise_for_status()
 
 
 def dingtalk_sign() -> tuple[str, str]:

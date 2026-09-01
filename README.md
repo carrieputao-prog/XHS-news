@@ -4,10 +4,12 @@
 
 ## 环境变量
 
-- `GEMINI_API_KEY`
+- `DASHSCOPE_API_KEY`
 - `DINGTALK_WEBHOOK`
 - `DINGTALK_SECRET`
 - `GRAPE_DATA_TOKEN`：需要有 `carrieputao-prog/grape-data` 写权限的 GitHub token
+- `QWEN_MODEL`：可选，默认 `qwen-plus`
+- `DASHSCOPE_BASE_URL`：可选，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 本地运行时可直接设置 `GITHUB_TOKEN`。GitHub Actions 中建议使用 `GRAPE_DATA_TOKEN`，因为默认 `GITHUB_TOKEN` 通常不能写入其他仓库。
 

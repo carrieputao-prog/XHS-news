@@ -14,7 +14,9 @@ from typing import Any
 import httpx
 
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+DASHSCOPE_API_KEY = os.environ["DASHSCOPE_API_KEY"]
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen-plus")
 DINGTALK_WEBHOOK = os.environ["DINGTALK_WEBHOOK"]
 DINGTALK_SECRET = os.environ["DINGTALK_SECRET"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
@@ -117,63 +119,21 @@ def generate_daily_hot_trends() -> dict[str, Any]:
   "ai_terms": ["AI相关词"]
 }}"""
 
-    response = httpx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        params={"key": GEMINI_API_KEY},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "tools": [{"google_search": {}}],
+    raw = call_qwen(
+        prompt,
+        enable_search=True,
+        search_options={
+            "forced_search": True,
+            "search_strategy": "turbo",
+            "freshness": 7,
+            "assigned_site_list": [
+                "xiaohongshu.com",
+                "xh.newrank.cn",
+            ],
         },
         timeout=120,
     )
-    raise_for_gemini_error(response)
-    raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(strip_json_fence(raw))
-
-
-def daily_schema() -> dict[str, Any]:
-    topic = {
-        "type": "OBJECT",
-        "properties": {
-            "topic": {"type": "STRING"},
-            "evidence": {"type": "STRING"},
-            "representative_note": {"type": "STRING"},
-            "reason": {"type": "STRING"},
-            "source": {"type": "STRING"},
-            "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
-        },
-        "required": ["topic", "evidence", "representative_note", "reason", "source", "tags"],
-    }
-    hit = {
-        "type": "OBJECT",
-        "properties": {
-            "title": {"type": "STRING"},
-            "followers": {"type": "STRING"},
-            "engagement": {"type": "STRING"},
-            "engagement_follower_ratio": {"type": "STRING"},
-            "reason": {"type": "STRING"},
-            "source": {"type": "STRING"},
-            "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
-        },
-        "required": [
-            "title",
-            "followers",
-            "engagement",
-            "engagement_follower_ratio",
-            "reason",
-            "source",
-            "tags",
-        ],
-    }
-    return {
-        "type": "OBJECT",
-        "properties": {
-            "hot_topics": {"type": "ARRAY", "items": topic},
-            "low_follower_hits": {"type": "ARRAY", "items": hit},
-            "ai_terms": {"type": "ARRAY", "items": {"type": "STRING"}},
-        },
-        "required": ["hot_topics", "low_follower_hits", "ai_terms"],
-    }
 
 
 def render_daily_markdown(data: dict[str, Any], date_text: str) -> str:
@@ -271,43 +231,13 @@ source统一使用：Agent-小红书热点-{week_start}-{week_end}
 
 只返回JSON。"""
 
-    response = httpx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        params={"key": GEMINI_API_KEY},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": weekly_schema(),
-            },
-        },
+    raw = call_qwen(
+        prompt,
+        enable_search=False,
         timeout=60,
     )
-    raise_for_gemini_error(response)
-    raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     result = json.loads(strip_json_fence(raw))
     return result.get("candidates", [])
-
-
-def weekly_schema() -> dict[str, Any]:
-    return {
-        "type": "OBJECT",
-        "properties": {
-            "candidates": {
-                "type": "ARRAY",
-                "items": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "term": {"type": "STRING"},
-                        "brief": {"type": "STRING"},
-                        "source": {"type": "STRING"},
-                    },
-                    "required": ["term", "brief", "source"],
-                },
-            }
-        },
-        "required": ["candidates"],
-    }
 
 
 def save_pending_topics(candidates: list[dict[str, str]], date_str: str) -> None:
@@ -357,13 +287,47 @@ def strip_json_fence(raw: str) -> str:
     text = text.removeprefix("```json").removeprefix("```").strip()
     if text.endswith("```"):
         text = text[:-3].strip()
+    if not text.startswith("{"):
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start : end + 1]
     return text
 
 
-def raise_for_gemini_error(response: httpx.Response) -> None:
+def call_qwen(
+    prompt: str,
+    *,
+    enable_search: bool,
+    search_options: dict[str, Any] | None = None,
+    timeout: int = 60,
+) -> str:
+    payload: dict[str, Any] = {
+        "model": QWEN_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if enable_search:
+        payload["enable_search"] = True
+        if search_options:
+            payload["search_options"] = search_options
+
+    response = httpx.post(
+        f"{DASHSCOPE_BASE_URL.rstrip('/')}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    raise_for_qwen_error(response)
+    return response.json()["choices"][0]["message"]["content"]
+
+
+def raise_for_qwen_error(response: httpx.Response) -> None:
     if response.is_success:
         return
-    print(f"Gemini API error: {response.status_code}")
+    print(f"Qwen API error: {response.status_code}")
     print(response.text)
     response.raise_for_status()
 

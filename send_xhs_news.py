@@ -123,9 +123,6 @@ def generate_daily_hot_trends() -> dict[str, Any]:
         json={
             "contents": [{"parts": [{"text": prompt}]}],
             "tools": [{"google_search": {}}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-            },
         },
         timeout=120,
     )

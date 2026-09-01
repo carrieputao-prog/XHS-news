@@ -30,7 +30,7 @@ jobs:
 
       - name: Run bot
         env:
-          DASHSCOPE_API_KEY: ${{ secrets.Qwen }}
+          DASHSCOPE_API_KEY: ${{ secrets.QWEN }}
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
           GITHUB_TOKEN: ${{ secrets.GRAPE_DATA_TOKEN || secrets.GITHUB_TOKEN }}

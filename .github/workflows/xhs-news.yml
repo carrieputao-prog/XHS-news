@@ -1,0 +1,44 @@
+name: XHS AI Hot Trends
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+    - cron: "0 2 * * 5"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - weekly
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GRAPE_DATA_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python send_xhs_news.py "${{ inputs.mode }}"
+          elif [ "$(date -u +%u)" = "5" ] && [ "$(date -u +%H)" = "02" ]; then
+            python send_xhs_news.py weekly
+          else
+            python send_xhs_news.py daily
+          fi
